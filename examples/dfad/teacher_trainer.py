@@ -2,7 +2,6 @@ import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # os.environ['TL_BACKEND'] = 'tensorflow'
 import sys
-from pathlib import Path
 
 import gammagl.data
 import numpy as np
