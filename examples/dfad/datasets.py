@@ -8,7 +8,7 @@ from gammagl.transforms import BaseTransform
 from gammagl.utils import degree
 from my_utils import one_hot
 
-# 对节点出度进行独热编码作为节点特征
+# Encode the out-degree of nodes as one-hot for node features
 class OneHotDegree(BaseTransform):
     def __init__(self, max_degree):
         self.max_degree = max_degree
@@ -21,7 +21,7 @@ class OneHotDegree(BaseTransform):
         graph.x = one_hog_deg
         return graph
 
-# 对节点出度规范化作为节点特征
+
 class NormalizedDegree(BaseTransform):
     def __init__(self, mean, std):
         self.mean = mean

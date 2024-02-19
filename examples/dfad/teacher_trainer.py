@@ -78,12 +78,12 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
     best_acc = 0
     acc_list = []
     for epoch in range(args.n_epochs):
-        # 训练过程
+        # training process
         gin_net.set_train()
         for batch in train_loader:
             train_loss = train_one_step(batch, None)
 
-        # 测试
+        # test
         acc = test(gin_net, test_loader, epoch)
         acc_list.append(acc)
         print("Epoch [{:0>3d}] ".format(epoch + 1) \
