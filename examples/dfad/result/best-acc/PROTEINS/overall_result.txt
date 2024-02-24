@@ -1,0 +1,1 @@
+{'lr': 0.0005, 'n_epochs': 260, 'num_layers': 5, 'hidden_units': 128, 'l2_coef': 0.0005, 'dataset': 'PROTEINS', 'best_acc_mean': '0.705', 'best_acc_std': '0.051'}
