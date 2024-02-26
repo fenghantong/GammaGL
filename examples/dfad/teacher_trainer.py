@@ -4,6 +4,7 @@ os.environ['TL_BACKEND'] = 'torch'
 import sys
 from matplotlib import pyplot as plt
 
+
 import gammagl.data
 import numpy as np
 from gammagl.datasets import TUDataset
@@ -101,6 +102,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
             best_acc = acc
             gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
+    os.makedirs("./result/{args.dataset}/loss", exist_ok=True)
     plt.figure()
     plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
     plt.xlabel('Epoch')
