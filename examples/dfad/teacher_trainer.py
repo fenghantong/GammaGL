@@ -76,11 +76,16 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
 
     best_acc = 0
     acc_list = []
+    loss_list = []
     for epoch in range(args.n_epochs):
         # training process
         gin_net.set_train()
+        epoch_loss = 0
         for batch in train_loader:
             train_loss = train_one_step(batch, batch.y)
+            epoch_loss += train_loss
+        loss_list.append(epoch_loss)
+
 
         # test
         acc = test(gin_net, test_loader, epoch)
@@ -94,6 +99,16 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
         if acc > best_acc:
             best_acc = acc
             gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
+
+    plt.figure()
+    plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Curve')
+    plt.legend()
+    plt.grid()
+    plt.savefig(f"./result/{args.dataset}/loss/{args.dataset}_{fold_number}_loss_curve.png")
+    plt.close()
 
     f.close()
 
