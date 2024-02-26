@@ -2,6 +2,7 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['TL_BACKEND'] = 'torch'
 import sys
+from matplotlib import pyplot as plt
 
 import gammagl.data
 import numpy as np
@@ -135,7 +136,6 @@ if __name__ == '__main__':
     best_acc_list = []
     for fold_number in range(1, 11):
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
-
         assert train_set[0].x != None
         
         print(train_set[0].x)
