@@ -93,7 +93,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
 
         if acc > best_acc:
             best_acc = acc
-            gin_net.save_weights("./teacher_model/{0}/{0}_{1}_{2}.npz".format(args.dataset, args.n_epochs, fold_number), format="npz_dict")
+            gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
     f.close()
 
