@@ -1,6 +1,6 @@
 import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# os.environ['TL_BACKEND'] = 'tensorflow'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['TL_BACKEND'] = 'torch'
 import sys
 
 import gammagl.data
@@ -48,7 +48,7 @@ def test(net, test_loader, epoch):
     all_labels = []
 
     for batch in test_loader:
-        pred = net(batch.x, batch.edge_index, batch.batch)
+        pred = net(batch.x, batch.edge_index, batch.batch).detach()
         all_preds.append(pred)
         all_labels.append(batch.y)
 
@@ -56,8 +56,8 @@ def test(net, test_loader, epoch):
     all_labels = tlx.convert_to_tensor(np.concatenate(all_labels))
     all_labels = tlx.reshape(all_labels, (-1, 1))
 
-    all_preds = tlx.cast(all_preds, "int32")
-    all_labels = tlx.cast(all_labels, "int32")
+    all_preds = tlx.cast(all_preds, tlx.int32)
+    all_labels = tlx.cast(all_labels, tlx.int32)
 
     acc = tlx.metrics.acc(all_preds, all_labels)
     print("Epoch {0}, Test: acc = {1}".format(epoch, acc))
@@ -80,7 +80,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
         # training process
         gin_net.set_train()
         for batch in train_loader:
-            train_loss = train_one_step(batch, None)
+            train_loss = train_one_step(batch, batch.y)
 
         # test
         acc = test(gin_net, test_loader, epoch)
@@ -89,7 +89,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
               + "  acc: {:.4f}".format(acc))
         if epoch == 0:
             csv_writer.writerow(["epoch", "acc"])
-        csv_writer.writerow([epoch, acc])
+        csv_writer.writerow([epoch, round(acc, 3)])
 
         if acc > best_acc:
             best_acc = acc
@@ -102,7 +102,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
+    parser.add_argument("--lr", type=float, default=0.0005, help="learning rate")
     parser.add_argument("--n_epochs", type=int, default=120, help="number of epoch")
     parser.add_argument("--num_layers", type=int, default=5)
     parser.add_argument("--hidden_units", type=int, default=128, help="dimention of hidden layers")
@@ -122,9 +122,10 @@ if __name__ == '__main__':
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
 
         assert train_set[0].x != None
-
+        
+        print(train_set[0].x)
         gin_net = GINModel(
-            in_channels = dataset.num_features,
+            in_channels = train_set[0].x.shape[1],
             hidden_channels = args.hidden_units,
             out_channels = dataset.num_classes,
             num_layers = args.num_layers,
