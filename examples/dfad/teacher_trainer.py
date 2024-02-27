@@ -102,12 +102,12 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
             best_acc = acc
             gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
-    os.makedirs("./result/{args.dataset}/loss", exist_ok=True)
+    os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
     plt.figure()
     plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Training Loss Curve')
+    plt.title('Training Loss Curve. lr={0} l2_coef={1}'.format(args.lr, args.l2_coef))
     plt.legend()
     plt.grid()
     plt.savefig(f"./result/{args.dataset}/loss/{args.dataset}_{fold_number}_loss_curve.png")
