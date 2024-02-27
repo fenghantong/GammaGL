@@ -106,7 +106,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
     plt.figure()
     plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
-    plt.ylim(0, loss_list_sorted[40])
+    plt.ylim(0, 2 * loss_list_sorted[40])
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Training Loss Curve. lr={0} l2_coef={1}'.format(args.lr, args.l2_coef))
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     os.makedirs("./teacher_model", exist_ok=True)
 
     best_acc_list = []
-    for fold_number in range(1, 3):
+    for fold_number in range(1, 11):
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
         assert train_set[0].x != None
         
