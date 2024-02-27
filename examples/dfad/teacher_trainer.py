@@ -102,8 +102,8 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
             best_acc = acc
             gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
-    loss_list.sort(reverse = True)
-    plt.ylim(0, 2 * loss_list[40])
+    loss_list_sorted = sorted(loss_list, reverse=True)
+    plt.ylim(0, loss_list_sorted[40])
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
     plt.figure()
     plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     os.makedirs("./teacher_model", exist_ok=True)
 
     best_acc_list = []
-    for fold_number in range(1, 11):
+    for fold_number in range(1, 3):
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
         assert train_set[0].x != None
         
