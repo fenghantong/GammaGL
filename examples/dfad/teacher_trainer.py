@@ -103,7 +103,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
             gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
     loss_list.sort(reverse = True)
-    plt.ylim(0, 3 * loss_list[20])
+    plt.ylim(0, 2 * loss_list[40])
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
     plt.figure()
     plt.plot(range(1, len(loss_list) + 1), loss_list, label='Training Loss')
