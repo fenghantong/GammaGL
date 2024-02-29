@@ -59,5 +59,19 @@ def get_dataset(dataset_name):
 
     return TUDataset(path, dataset_name, transform=transform)
 
+def load_dataloader(dataset_name, dataset, batch_size, fold_number):
+    train_idx = np.loadtxt('./dataset/{0}/10fold_idx/train_idx-{1}.txt'.format(dataset_name, fold_number), dtype=np.int64)
+    test_idx = np.loadtxt('./dataset/{0}/10fold_idx/test_idx-{1}.txt'.format(dataset_name, fold_number), dtype=np.int64)
+
+    print(len(test_idx))
+    assert len(train_idx) + len(test_idx) == len(dataset)
+
+    train_set, test_set = dataset[train_idx], dataset[test_idx]
+
+    train_loader = DataLoader(train_set, batch_size=batch_size)
+    test_loader = DataLoader(test_set, batch_size=batch_size)
+
+    return train_loader, test_loader, train_set, test_set
+
 #dataset = get_dataset("COLLAB")
 #print(dataset[0].x)
