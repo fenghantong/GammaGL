@@ -13,7 +13,7 @@ from gammagl.loader import DataLoader
 from tensorlayerx.model import TrainOneStep, WithLoss
 from gammagl.models import GINModel
 
-from datasets import get_dataset
+from datasets import get_dataset, load_dataloader
 
 import argparse
 import csv
@@ -29,19 +29,7 @@ class SemiSpvzLoss(WithLoss):
         return loss
 
 
-def load_dataloader(dataset_name, dataset, batch_size, fold_number):
-    train_idx = np.loadtxt('./dataset/{0}/10fold_idx/train_idx-{1}.txt'.format(dataset_name, fold_number), dtype=np.int64)
-    test_idx = np.loadtxt('./dataset/{0}/10fold_idx/test_idx-{1}.txt'.format(dataset_name, fold_number), dtype=np.int64)
 
-    print(len(test_idx))
-    assert len(train_idx) + len(test_idx) == len(dataset)
-
-    train_set, test_set = dataset[train_idx], dataset[test_idx]
-
-    train_loader = DataLoader(train_set, batch_size=batch_size)
-    test_loader = DataLoader(test_set, batch_size=batch_size)
-
-    return train_loader, test_loader, train_set, test_set
 
 def test(net, test_loader, epoch):
     net.set_eval()
@@ -100,7 +88,7 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
 
         if acc > best_acc:
             best_acc = acc
-            gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
+            gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number))
 
     loss_list_sorted = sorted(loss_list, reverse=True)
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
@@ -139,7 +127,7 @@ if __name__ == '__main__':
 
     best_acc_list = []
     for fold_number in range(1, 11):
-        train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
+        train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 64, fold_number)
         assert train_set[0].x != None
         
         print(train_set[0].x)
