@@ -1,6 +1,6 @@
 import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# os.environ['TL_BACKEND'] = 'tensorflow'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['TL_BACKEND'] = 'torch'
 import sys
 import json
 
@@ -127,7 +127,7 @@ def test(net, test_loader):
     all_labels = []
 
     for batch in test_loader:
-        pred = net(batch.x, batch.edge_index, batch.batch).detach()
+        pred = net(batch.x, batch.edge_index, batch.batch)
         all_preds.append(pred)
         all_labels.append(batch.y)
 
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     parser.add_argument("--hidden_units", type=int, default=128, help="dimention of hidden layers")
     parser.add_argument("--student_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for student")
     parser.add_argument("--generator_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for generator")
-    parser.add_argument('--dataset', type=str, default='COLLAB', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
+    parser.add_argument('--dataset', type=str, default='IMDB-BINARY', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
     args = parser.parse_args()
 
     # get dataset & loader
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     os.makedirs("./student_model", exist_ok=True)
 
     # 10-fold
-    for fold_number in range(1, 11):
+    for fold_number in range(9, 11):
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
         assert train_set[0].x != None
 
@@ -179,18 +179,36 @@ if __name__ == '__main__':
             name="GIN"
         )
 
+        print("teacher:")
+        print(train_set[0].x.shape[1], teacher_info['hidden_units'], teacher_info['num_layers'])
+
         teacher_folder = "./teacher_model/{0}/".format(dataset_name)
         f_name = "{0}_{1}.npz".format(dataset_name, fold_number)
-        # file_path = os.path.join(teacher_folder, f_name)
-        # data = np.load(file_path, allow_pickle=True)
-        # print(data.files)
-        teacher_weights = tlx.files.load_npz(teacher_folder, f_name)
-        tlx.files.assign_weights(teacher_weights, teacher)
+        file_path = os.path.join(teacher_folder, f_name)
+        #weights = tlx.files.load_npz(path=teacher_folder, name=f_name)
+        
+
+        '''data = np.load(file_path, allow_pickle=True)
+        weights = [data[str(data.files[i])].T for i in range(len(data.files)) if "weights" in str(data.files[i]) or "biases" in str(data.files[i])]
+        print(data.files)
+        print(len(data.files))
+
+        s1 = [t.shape for t in weights]
+        s2 = [tuple(t.shape) for t in teacher.trainable_weights]
+        print(s1)
+        print("--------")
+        print(s2)'''
+
+        teacher.load_weights(file_path, format="npz_dict", skip=True)
+        print("success")
+
+        test_acc = test(teacher, test_loader)
+        print(test_acc)
 
         # initialize student
         if args.student == "gcn":
             student = GCNModel(
-                featurn_dim=train_set[0].x.shape[1],
+                feature_dim=train_set[0].x.shape[1],
                 hidden_dim=teacher_info['hidden_units'],
                 num_classes=dataset.num_classes,
                 num_layers=teacher_info['num_layers']
