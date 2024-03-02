@@ -8,6 +8,8 @@ def one_hot(index, num_classes=None):
 
     if num_classes is None:
         num_classes = int(tlx.reduce_max(index)) + 1
+    else:
+        num_classes = int(num_classes)
 
     out = tlx.zeros((index.shape[0], num_classes), dtype=tlx.int32, device=index.device)
     out_list = []
