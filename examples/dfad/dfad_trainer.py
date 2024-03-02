@@ -153,6 +153,7 @@ if __name__ == '__main__':
     parser.add_argument("--student_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for student")
     parser.add_argument("--generator_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for generator")
     parser.add_argument('--dataset', type=str, default='COLLAB', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
+    parser.add_argument("--generator_dropout", type=float, default=0.5)
     args = parser.parse_args()
 
     # get dataset & loader
@@ -227,6 +228,11 @@ if __name__ == '__main__':
             )
         else:
             raise NameError("Incorrect model name.")
+
+        #initialize generator
+        x_example = train_set[0].x
+        generator = Generator([64, 128, 256], x_example.shape[0], x_example.shape[1], args.generator_dropout)
+
 
         optimizer_s = tlx.optimizers.Adam(lr=args.student_lr, weight_decay=args.student_l2_coef)
         optimizer_g = tlx.optimizers.Adam(lr=args.generator_lr, weight_decay=args.generator_l2_coef)
