@@ -17,7 +17,7 @@ class OneHotDegree(BaseTransform):
         # assert graph.edge_index is not None
         deg = degree(graph.edge_index[0], num_nodes=graph.num_nodes, dtype=tlx.int32)
         one_hog_deg = one_hot(deg, self.max_degree + 1)
-        one_hog_deg = tlx.cast(one_hog_deg, np.float32)
+        one_hog_deg = tlx.cast(one_hog_deg, tlx.float32)
         graph.x = one_hog_deg
         return graph
 
