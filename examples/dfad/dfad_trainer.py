@@ -16,7 +16,7 @@ from gammagl.models import GINModel, GCNModel, GATModel, GraphSAGE_Full_Model
 
 import numpy as np
 from datasets import get_dataset, load_dataloader
-
+import csv
 
 
 class GeneratorLoss(WithLoss):
@@ -28,6 +28,7 @@ class GeneratorLoss(WithLoss):
     def student_forward(self, x, edge_index, num_nodes, batch):
         model_name = type(self.student).__name__
         if model_name == "GCNModel":
+            print(x, edge_index, num_nodes)
             return self.student(x, edge_index, None, num_nodes)
         elif model_name == "GINModel":
             return self.student(x, edge_index, batch)
@@ -39,6 +40,7 @@ class GeneratorLoss(WithLoss):
             raise NameError("Model name error")
 
     def forward(self, z, label_no_use):
+        print("forward called")
         generated_graph = self.backbone_network(z)
         nodes_logits, adj = generated_graph
         loader = data_construct(z.shape[0], nodes_logits, adj)
@@ -47,9 +49,20 @@ class GeneratorLoss(WithLoss):
         teacher_logits = self.teacher(x, edge_index, num_nodes)
         return -self._loss_fn(student_logits, teacher_logits)
 
+class Student_Loss(WithLoss):
+    def __init__(self, net, loss_fn):
+        super(Student_Loss, self).__init__(backbone=net, loss_fn=loss_fn)
+
+    def forward(self, data, logits):
+        logits = self.backbone_network(data['x'], data['edge_index'], None, data['num_nodes'])
+        train_logits = tlx.gather(logits, data['train_idx'])
+        train_y = tlx.gather(data['y'], data['train_idx'])
+        loss = self._loss_fn(train_logits, train_y)
+        return loss
+
 def data_construct(batch_size, nodes_logits, adj):
     data_list = []
-    for i in range(nodes_logits.shape[0]):
+    for i in range(len(nodes_logits)):
         x = nodes_logits[i]
         edge = adj[i]
         graph = gammagl.data.Graph(x = x, edge_index = edge)
@@ -61,7 +74,7 @@ def data_construct(batch_size, nodes_logits, adj):
 def generate_graph(args):
     z = tlx.random_normal((args.batch_size, args.nz))  # 随机噪声
     generated_graph = generator(z) # z通过生成器，生成一个图
-    nodes_logits, adj = generated_graph
+    adj, nodes_logits = generated_graph
     loader = data_construct(args.batch_size, nodes_logits, adj)
     return loader
 
@@ -77,7 +90,10 @@ def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_load
     student_trainable_weight = student.trainable_weights
     generator_trainable_weights = generator.trainable_weights
     loss_fun = tlx.losses.absolute_difference_error
-    s_with_loss = WithLoss(student, loss_fun) # student的损失函数
+    # s_with_loss = WithLoss(student, loss_fun) # student的损失函数
+
+    s_with_loss = Student_Loss(student, loss_fun)
+
     g_with_loss = GeneratorLoss(generator, loss_fun, student, teacher) # generator的损失函数
     s_train_one_step = TrainOneStep(s_with_loss, optimizer_s, student_trainable_weight)
     g_train_one_step = TrainOneStep(g_with_loss, optimizer_g, generator_trainable_weights)
@@ -92,7 +108,8 @@ def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_load
             student.set_train()
             loader = generate_graph(args)
             for batch in loader:
-                t_logits = teacher(batch.x, batch.edge_index, None, batch.num_nodes)
+                t_logits = teacher(batch.x, batch.edge_index, batch.batch)
+                print("t_logits.shape:", t_logits.shape)
                 s_loss = s_train_one_step(batch, t_logits)
             student.set_eval()
 
@@ -147,13 +164,16 @@ if __name__ == '__main__':
     parser.add_argument("--student", type=str, default='gcn', help="student model")
     parser.add_argument("--student_lr", type=float, default=0.0005, help="learning rate of student model")
     parser.add_argument("--generator_lr", type=float, default=0.0005, help="learning rate of generator")
-    parser.add_argument("--n_epochs", type=int, default=120, help="number of epoch")
+    parser.add_argument("--n_epochs", type=int, default=80, help="number of epoch")
+    parser.add_argument("--student_epochs", type=int, default=5)
     parser.add_argument("--num_layers", type=int, default=5)
     parser.add_argument("--hidden_units", type=int, default=128, help="dimention of hidden layers")
     parser.add_argument("--student_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for student")
     parser.add_argument("--generator_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for generator")
     parser.add_argument('--dataset', type=str, default='COLLAB', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
     parser.add_argument("--generator_dropout", type=float, default=0.5)
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--nz", type=int, default=32)
     args = parser.parse_args()
 
     # get dataset & loader
@@ -165,7 +185,7 @@ if __name__ == '__main__':
 
     # 10-fold
     for fold_number in range(1, 11):
-        train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 32, fold_number)
+        train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, args.batch_size, fold_number)
         assert train_set[0].x != None
 
         # load teacher
@@ -189,7 +209,7 @@ if __name__ == '__main__':
         
 
 
-        teacher.load_weights(file_path, format="npz_dict", skip=True)
+        # teacher.load_weights(file_path, format="npz_dict", skip=True)
 
         test_acc = test(teacher, test_loader)
         teacher.load_weights(file_path, format="npz_dict", skip=True)
@@ -237,7 +257,7 @@ if __name__ == '__main__':
         optimizer_s = tlx.optimizers.Adam(lr=args.student_lr, weight_decay=args.student_l2_coef)
         optimizer_g = tlx.optimizers.Adam(lr=args.generator_lr, weight_decay=args.generator_l2_coef)
 
-        best_acc = train(args, teacher, student, generator, optimizer_s, optimizer_g, test_loader)
+        best_acc = train(args, teacher, student, generator, optimizer_s, optimizer_g, train_loader)
 
         os.makedirs("./dfad_result/best-acc/{0}".format(dataset_name), exist_ok=True)
         with open("./dfad_result/best-acc/{0}/{0}_{1}_best-acc.txt".format(dataset_name, fold_number), "w") as f:
