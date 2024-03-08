@@ -19,45 +19,44 @@ from datasets import get_dataset, load_dataloader
 import csv
 
 
+def student_forward(student, x, edge_index, num_nodes, batch):
+    model_name = type(student).__name__
+    if model_name == "GCNModel":
+        print(x, edge_index, num_nodes)
+        return student(x, edge_index, None, num_nodes)
+    elif model_name == "GINModel":
+        return student(x, edge_index, batch)
+    elif model_name == "GATModel":
+        return student(x, edge_index, num_nodes)
+    elif model_name == "GraphSAGE_Full_Model":
+        return student(x, edge_index)
+    else:
+        raise NameError("Model name error")
+
 class GeneratorLoss(WithLoss):
     def __init__(self, net, loss_fn, student, teacher):
         super(GeneratorLoss, self).__init__(backbone=net, loss_fn=loss_fn)
         self.student = student
         self.teacher = teacher
 
-    def student_forward(self, x, edge_index, num_nodes, batch):
-        model_name = type(self.student).__name__
-        if model_name == "GCNModel":
-            print(x, edge_index, num_nodes)
-            return self.student(x, edge_index, None, num_nodes)
-        elif model_name == "GINModel":
-            return self.student(x, edge_index, batch)
-        elif model_name == "GATModel":
-            return self.student(x, edge_index, num_nodes)
-        elif model_name == "GraphSAGE_Full_Model":
-            return self.student(x, edge_index)
-        else:
-            raise NameError("Model name error")
-
     def forward(self, z, label_no_use):
-        print("forward called")
         generated_graph = self.backbone_network(z)
         nodes_logits, adj = generated_graph
         loader = data_construct(z.shape[0], nodes_logits, adj)
         x, edge_index, num_nodes, batch = loader[0].x, loader[0].edge_index, loader[0].num_nodes, loader[0].batch
-        student_logits = self.student_forward(x, edge_index, num_nodes, batch)
+        student_logits = student_forward(x, edge_index, num_nodes, batch)
         teacher_logits = self.teacher(x, edge_index, num_nodes)
         return -self._loss_fn(student_logits, teacher_logits)
 
-class Student_Loss(WithLoss):
+class StudentLoss(WithLoss):
     def __init__(self, net, loss_fn):
-        super(Student_Loss, self).__init__(backbone=net, loss_fn=loss_fn)
+        super(StudentLoss, self).__init__(backbone=net, loss_fn=loss_fn)
 
     def forward(self, data, logits):
-        logits = self.backbone_network(data['x'], data['edge_index'], None, data['num_nodes'])
-        train_logits = tlx.gather(logits, data['train_idx'])
-        train_y = tlx.gather(data['y'], data['train_idx'])
-        loss = self._loss_fn(train_logits, train_y)
+        print("In forward, num_nodes=" + str(data['num_nodes']))
+        logits = student_forward(self.backbone_network, data['x'], data['edge_index'], data['num_nodes'], data['batch'])
+        y = data['y']
+        loss = self._loss_fn(logits, y)
         return loss
 
 def data_construct(batch_size, nodes_logits, adj):
@@ -92,7 +91,7 @@ def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_load
     loss_fun = tlx.losses.absolute_difference_error
     # s_with_loss = WithLoss(student, loss_fun) # student的损失函数
 
-    s_with_loss = Student_Loss(student, loss_fun)
+    s_with_loss = StudentLoss(student, loss_fun)
 
     g_with_loss = GeneratorLoss(generator, loss_fun, student, teacher) # generator的损失函数
     s_train_one_step = TrainOneStep(s_with_loss, optimizer_s, student_trainable_weight)
