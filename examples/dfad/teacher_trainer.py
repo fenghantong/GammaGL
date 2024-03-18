@@ -17,6 +17,7 @@ from datasets import get_dataset, load_dataloader
 
 import argparse
 import csv
+import yaml
 
 
 class SemiSpvzLoss(WithLoss):
@@ -27,8 +28,6 @@ class SemiSpvzLoss(WithLoss):
         logits = self.backbone_network(data.x, data.edge_index, data.batch)
         loss = self._loss_fn(logits, data.y)
         return loss
-
-
 
 
 def test(net, test_loader, epoch):
@@ -52,6 +51,7 @@ def test(net, test_loader, epoch):
     acc = tlx.metrics.acc(all_preds, all_labels)
     print("Epoch {0}, Test: acc = {1}".format(epoch, acc))
     return acc
+
 
 def train(args, gin_net, train_loader, test_loader, fold_number):
     os.makedirs("./result/{0}".format(args.dataset), exist_ok=True)
@@ -88,7 +88,11 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
 
         if acc > best_acc:
             best_acc = acc
-            gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number))
+            if args.save_model:
+                gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number))
+
+        s2 = [tuple(t.shape) for t in gin_net.trainable_weights]
+        print(s2)
 
     loss_list_sorted = sorted(loss_list, reverse=True)
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
@@ -116,6 +120,7 @@ if __name__ == '__main__':
     parser.add_argument("--hidden_units", type=int, default=128, help="dimention of hidden layers")
     parser.add_argument("--l2_coef", type=float, default=5e-4, help="l2 loss coeficient")
     parser.add_argument('--dataset', type=str, default='MUTAG', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
+    parser.add_argument('--save_model', type=bool, default=True)
 
     args = parser.parse_args()
 
@@ -141,6 +146,8 @@ if __name__ == '__main__':
 
         best_acc = train(args, gin_net, train_loader, test_loader, fold_number)
 
+
+
         os.makedirs("./result/best-acc/{0}".format(dataset_name), exist_ok=True)
         with open("./result/best-acc/{0}/{0}_{1}_best-acc.txt".format(dataset_name, fold_number), "w") as f:
             f.write(str(best_acc))
@@ -161,8 +168,16 @@ if __name__ == '__main__':
         "best_acc_mean": best_acc_mean,
         "best_acc_std": best_acc_std
     }
-    with open("./result/best-acc/{0}/overall_result.txt".format(args.dataset), "w") as f:
-        f.write(str(overall_result))
+    with open("./result/best-acc/{0}/overall_result.yaml".format(args.dataset), "w") as f:
+        yaml.dump(overall_result, f, default_flow_style=False)
+
+    model_id = "{0}_{1}_{2}_{3}_{4}".format(args.n_epochs, args.lr, args.num_layers, args.hidden_units, args.l2_coef)
+    file_name = "./teacher_result/{0}/{1}.yaml".format(args.dataset, model_id)
+    os.makedirs("./teacher_result", exist_ok=True)
+    with open(file_name, "w") as f:
+        yaml.dump(overall_result, f, default_flow_style=False)
+
+
 
 
 
