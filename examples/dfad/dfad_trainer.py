@@ -17,13 +17,26 @@ from gammagl.models import GINModel, GCNModel, GATModel, GraphSAGE_Full_Model
 import numpy as np
 from datasets import get_dataset, load_dataloader
 import csv
+from gammagl.layers.pool.glob import global_sum_pool
+from gammagl.models.mlp import MLP
 
 
-def student_forward(student, x, edge_index, num_nodes, batch):
+# 有些网络输出的是各个节点的分类结果，需要用该函数转化为图分类结果
+def graph_pooling(logits, num_classes, batch):
+    logits = global_sum_pool(logits, batch)
+    hidden_channels = logits.shape[1]
+    mlp = MLP([hidden_channels, hidden_channels, num_classes])
+    return mlp(logits)
+
+
+def student_forward(student, x, edge_index, num_nodes, batch, num_classes):
+# def student_forward(student, data):
     model_name = type(student).__name__
     if model_name == "GCNModel":
-        print(x, edge_index, num_nodes)
-        return student(x, edge_index, None, num_nodes)
+        logits = student(x, edge_index, None, num_nodes)
+        logits = graph_pooling(logits, num_classes, batch)
+        return logits
+        # return student(data['x'], data['edge_index'], None, data['num_nodes'])
     elif model_name == "GINModel":
         return student(x, edge_index, batch)
     elif model_name == "GATModel":
@@ -34,29 +47,36 @@ def student_forward(student, x, edge_index, num_nodes, batch):
         raise NameError("Model name error")
 
 class GeneratorLoss(WithLoss):
-    def __init__(self, net, loss_fn, student, teacher):
+    def __init__(self, net, loss_fn, student, teacher, num_classes):
         super(GeneratorLoss, self).__init__(backbone=net, loss_fn=loss_fn)
         self.student = student
         self.teacher = teacher
+        self.num_classes = num_classes
 
     def forward(self, z, label_no_use):
         generated_graph = self.backbone_network(z)
         nodes_logits, adj = generated_graph
         loader = data_construct(z.shape[0], nodes_logits, adj)
         x, edge_index, num_nodes, batch = loader[0].x, loader[0].edge_index, loader[0].num_nodes, loader[0].batch
-        student_logits = student_forward(x, edge_index, num_nodes, batch)
+        student_logits = student_forward(x, edge_index, num_nodes, batch, self.num_classes)
         teacher_logits = self.teacher(x, edge_index, num_nodes)
         return -self._loss_fn(student_logits, teacher_logits)
 
 class StudentLoss(WithLoss):
-    def __init__(self, net, loss_fn):
+    def __init__(self, net, loss_fn, batch_size, num_classes):
         super(StudentLoss, self).__init__(backbone=net, loss_fn=loss_fn)
+        self.loss_fn = loss_fn
+        self.batch_size = batch_size
+        self.num_classes = num_classes
 
-    def forward(self, data, logits):
-        print("In forward, num_nodes=" + str(data['num_nodes']))
-        logits = student_forward(self.backbone_network, data['x'], data['edge_index'], data['num_nodes'], data['batch'])
-        y = data['y']
-        loss = self._loss_fn(logits, y)
+    def forward(self, data, label):
+        print(data['x'].shape)
+        num_nodes = data['x'].shape[0] / self.batch_size
+        print(num_nodes)
+        logits = student_forward(self.backbone_network, data['x'], data['edge_index'], data['x'].shape[0], data['batch'], self.num_classes)
+        #logits = student_forward(self.backbone_network, data)
+        print("sizes: ", logits.shape, label.shape)
+        loss = self._loss_fn(logits, label)
         return loss
 
 def data_construct(batch_size, nodes_logits, adj):
@@ -66,6 +86,7 @@ def data_construct(batch_size, nodes_logits, adj):
         edge = adj[i]
         graph = gammagl.data.Graph(x = x, edge_index = edge)
         data_list.append(graph)
+
     return DataLoader(data_list, batch_size = batch_size)
 
 
@@ -78,7 +99,7 @@ def generate_graph(args):
     return loader
 
 
-def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_loader):
+def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_loader, num_classes):
     os.makedirs("./dfad_result/{0}".format(args.dataset), exist_ok=True)
     os.makedirs("./student_model/{0}".format(args.dataset), exist_ok=True)
     f = open("./dfad_result/{0}/{0}_{1}.csv".format(args.dataset, fold_number), "w", newline="")
@@ -91,9 +112,9 @@ def train(args, teacher, student, generator, optimizer_s, optimizer_g, test_load
     loss_fun = tlx.losses.absolute_difference_error
     # s_with_loss = WithLoss(student, loss_fun) # student的损失函数
 
-    s_with_loss = StudentLoss(student, loss_fun)
+    s_with_loss = StudentLoss(student, loss_fun, args.batch_size, num_classes)
 
-    g_with_loss = GeneratorLoss(generator, loss_fun, student, teacher) # generator的损失函数
+    g_with_loss = GeneratorLoss(generator, loss_fun, student, teacher, num_classes) # generator的损失函数
     s_train_one_step = TrainOneStep(s_with_loss, optimizer_s, student_trainable_weight)
     g_train_one_step = TrainOneStep(g_with_loss, optimizer_g, generator_trainable_weights)
 
@@ -219,31 +240,31 @@ if __name__ == '__main__':
         if args.student == "gcn":
             student = GCNModel(
                 feature_dim=train_set[0].x.shape[1],
-                hidden_dim=teacher_info['hidden_units'],
-                num_class=dataset.num_classes,
-                num_layers=teacher_info['num_layers']
+                hidden_dim=args.hidden_units,
+                num_class=hidden_dim, # 此处先让模型输出hidden_dim大小的logits。然后经过池化得到分类结果
+                num_layers=args.num_layers
             )
         elif args.student == 'gin':
             student = GINModel(
                 in_channels=train_set[0].x.shape[1],
-                hidden_channels=teacher_info['hidden_units'],
+                hidden_channels=args.hidden_units,
                 out_channels=dataset.num_classes,
-                num_layers=teacher_info['num_layers'],
+                num_layers=args.num_layers,
                 name="GIN"
             )
         elif args.student == 'gat':
             student = GATModel(
                 featurn_dim=train_set[0].x.shape[1],
-                hidden_dim=teacher_info['hidden_units'],
+                hidden_dim=args.hidden_units,
                 num_classes=dataset.num_classes,
-                num_layers=teacher_info['num_layers']
+                num_layers=args.num_layers
             )
         elif args.student == 'graphsage':
             student = GraphSAGE_Full_Model(
                 in_feats=train_set[0].x.shape[1],
-                n_hidden=teacher_info['hidden_units'],
+                n_hidden=args.hidden_units,
                 n_classes=dataset.num_classes,
-                n_layers=teacher_info['num_layers']
+                n_layers=args.num_layers
             )
         else:
             raise NameError("Incorrect model name.")
@@ -256,7 +277,7 @@ if __name__ == '__main__':
         optimizer_s = tlx.optimizers.Adam(lr=args.student_lr, weight_decay=args.student_l2_coef)
         optimizer_g = tlx.optimizers.Adam(lr=args.generator_lr, weight_decay=args.generator_l2_coef)
 
-        best_acc = train(args, teacher, student, generator, optimizer_s, optimizer_g, train_loader)
+        best_acc = train(args, teacher, student, generator, optimizer_s, optimizer_g, test_loader, dataset.num_classes)
 
         os.makedirs("./dfad_result/best-acc/{0}".format(dataset_name), exist_ok=True)
         with open("./dfad_result/best-acc/{0}/{0}_{1}_best-acc.txt".format(dataset_name, fold_number), "w") as f:
