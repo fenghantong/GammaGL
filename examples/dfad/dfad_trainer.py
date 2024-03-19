@@ -139,7 +139,7 @@ def test(net, test_loader):
 
     for batch in test_loader:
         if type(net).__name__ == "GINModel":
-            pred = net(batch.x, batch.edge_index, batch.x.shape[1])
+            pred = net(batch.x, batch.edge_index, batch.batch).detach()
         else:
             pred = net(batch.x, batch.edge_index, batch.x.shape[1], batch.batch).detach()
         all_preds.append(pred)
@@ -169,6 +169,7 @@ if __name__ == '__main__':
     parser.add_argument("--generator_l2_coef", type=float, default=5e-4, help="l2 loss coeficient for generator")
     parser.add_argument('--dataset', type=str, default='COLLAB', help='dataset(MUTAG/IMDB-BINARY/REDDIT-BINARY)')
     parser.add_argument("--generator_dropout", type=float, default=0.5)
+    parser.add_argument("--student_dropout", type=float, default=0.5)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--nz", type=int, default=32)
     args = parser.parse_args()
@@ -219,7 +220,8 @@ if __name__ == '__main__':
             feature_dim=train_set[0].x.shape[1],
             hidden_dim=args.hidden_units,
             num_classes=dataset.num_classes,
-            num_layers=args.num_layers
+            num_layers=args.num_layers,
+            drop_rate=args.student_dropout
         )
 
 
