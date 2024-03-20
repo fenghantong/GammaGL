@@ -34,9 +34,12 @@ class GeneratorLoss(WithLoss):
         generated_graph = self.backbone_network(z)
         nodes_logits, adj = generated_graph
         loader = data_construct(z.shape[0], nodes_logits, adj)
-        x, edge_index, num_nodes, batch = loader[0].x, loader[0].edge_index, loader[0].num_nodes, loader[0].batch
-        student_logits = self.student(x, edge_index, num_nodes, batch)
-        teacher_logits = self.teacher(x, edge_index, num_nodes)
+        for data in loader:
+            x, edge_index, num_nodes, batch = data.x, data.edge_index, data.num_nodes, data.batch
+            student_logits = self.student(x, edge_index, num_nodes, batch)
+            teacher_logits = self.teacher(x, edge_index, num_nodes)
+            student_logits = tlx.nn.Softmax()(student_logits)
+            teacher_logits = tlx.nn.Softmax()(teacher_logits)
         return -self._loss_fn(student_logits, teacher_logits)
 
 class StudentLoss(WithLoss):
@@ -49,7 +52,7 @@ class StudentLoss(WithLoss):
         print(data['x'].shape)
         num_nodes = data['x'].shape[0] / self.batch_size
         print(num_nodes)
-        logits = self.backbone_network(data['x'], data['edge_index'], data['x'].shape[0], data['bacht'])
+        logits = self.backbone_network(data['x'], data['edge_index'], data['x'].shape[0], data['batch'])
         loss = self._loss_fn(logits, label)
         return loss
 
@@ -57,6 +60,7 @@ def data_construct(batch_size, nodes_logits, adj):
     data_list = []
     for i in range(len(nodes_logits)):
         x = nodes_logits[i]
+        print("feature shape of generated graph:", x.shape)
         edge = adj[i]
         graph = gammagl.data.Graph(x = x, edge_index = edge)
         data_list.append(graph)
