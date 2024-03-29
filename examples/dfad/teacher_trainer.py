@@ -19,6 +19,11 @@ import argparse
 import csv
 import yaml
 
+if tlx.BACKEND == 'torch': # when the backend is torch and you want to use GPU
+    try:
+        tlx.set_device(device='GPU', id=0)
+    except:
+        print("GPU is not available")
 
 class SemiSpvzLoss(WithLoss):
     def __init__(self, net, loss_fn):
@@ -41,8 +46,8 @@ def test(net, test_loader, epoch):
         all_preds.append(pred)
         all_labels.append(batch.y)
 
-    all_preds = tlx.convert_to_tensor(np.vstack(all_preds))
-    all_labels = tlx.convert_to_tensor(np.concatenate(all_labels))
+    all_preds = tlx.ops.concat(all_preds, 0)
+    all_labels = tlx.ops.concat(all_labels, 0)
     all_labels = tlx.reshape(all_labels, (-1, 1))
 
     all_preds = tlx.cast(all_preds, tlx.int32)
@@ -89,11 +94,34 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
         if acc > best_acc:
             best_acc = acc
             if args.save_model:
-                gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number))
+                gin_net.save_weights("./teacher_model/{0}/{0}_{1}.npz".format(args.dataset, fold_number), format="npz_dict")
 
-        s2 = [tuple(t.shape) for t in gin_net.trainable_weights]
-        print(s2)
+    
+    # 以下内容测试在此文件中能否正确加载保存过的teacher模型，并测试acc是否正确
+    teacher = GINModel(
+           in_channels = train_set[0].x.shape[1],
+           hidden_channels = args.hidden_units,
+           out_channels = dataset.num_classes,
+           num_layers = args.num_layers,
+           name = "GIN"
+       )
 
+   
+
+
+    teacher_folder = "./teacher_model/{0}/".format(dataset_name)
+    f_name = "{0}_{1}.npz".format(dataset_name, fold_number)
+    file_path = os.path.join(teacher_folder, f_name)
+
+    test_acc = test(teacher, test_loader, 10000)
+    teacher.load_weights(file_path, format="npz_dict")
+    test_acc = test(teacher, test_loader, 10000)
+    print("t acc:", test_acc)
+
+
+
+
+    '''
     loss_list_sorted = sorted(loss_list, reverse=True)
     os.makedirs("./result/{0}/loss".format(args.dataset), exist_ok=True)
     plt.figure()
@@ -106,7 +134,9 @@ def train(args, gin_net, train_loader, test_loader, fold_number):
     plt.grid()
     plt.savefig(f"./result/{args.dataset}/loss/{args.dataset}_{fold_number}_loss_curve.png")
     plt.close()
-
+    '''
+    
+    
     f.close()
 
     return best_acc
@@ -131,7 +161,7 @@ if __name__ == '__main__':
     os.makedirs("./teacher_model", exist_ok=True)
 
     best_acc_list = []
-    for fold_number in range(1, 11):
+    for fold_number in range(1, 2):
         train_loader, test_loader, train_set, test_set = load_dataloader(dataset_name, dataset, 64, fold_number)
         assert train_set[0].x != None
         
@@ -173,7 +203,7 @@ if __name__ == '__main__':
 
     model_id = "{0}_{1}_{2}_{3}_{4}".format(args.n_epochs, args.lr, args.num_layers, args.hidden_units, args.l2_coef)
     file_name = "./teacher_result/{0}/{1}.yaml".format(args.dataset, model_id)
-    os.makedirs("./teacher_result", exist_ok=True)
+    os.makedirs("./teacher_result/{0}".format(args.dataset), exist_ok=True)
     with open(file_name, "w") as f:
         yaml.dump(overall_result, f, default_flow_style=False)
 

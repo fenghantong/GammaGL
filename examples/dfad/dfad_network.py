@@ -33,7 +33,7 @@ class DFADNetwork(tlx.nn.Module):
                 hidden_dim=hidden_dim,
                 num_class=hidden_dim,
                 heads=3,
-                drop_rate=droprate,
+                drop_rate=drop_rate,
                 num_layers=num_layers
             )
         elif model_name == "graphsage":
@@ -42,7 +42,7 @@ class DFADNetwork(tlx.nn.Module):
                 n_hidden=hidden_dim,
                 n_classes=hidden_dim,
                 n_layers=num_layers,
-                activation=tlx.RELU(),
+                activation=tlx.nn.ReLU(),
                 dropout=drop_rate,
                 aggregator_type="mean"
             )
@@ -52,15 +52,18 @@ class DFADNetwork(tlx.nn.Module):
         self.model_name = model_name
         self.num_classes = num_classes
         self.hidden_dim = hidden_dim
+        self.mlp = MLP([hidden_dim, hidden_dim, num_classes])
 
 
 
-    def forward(self, x, edge_index, num_nodes, batch, num_classes):
+    def forward(self, x, edge_index, num_nodes, batch):
+        print(x.shape)
         if self.model_name == "gcn":
             logits = self.gnn(x, edge_index, None, num_nodes)
         elif self.model_name == "gin":
             logits = self.gnn(x, edge_index, batch)
         elif self.model_name == "gat":
+            print("TAT:", num_nodes)
             logits = self.gnn(x, edge_index, num_nodes)
         elif self.model_name == "graphsage":
             logits = self.gnn(x, edge_index)
@@ -68,9 +71,9 @@ class DFADNetwork(tlx.nn.Module):
             raise NameError("model name error")
 
         if self.model_name != "gin":
-            mlp = MLP([self.hidden_dim, self.hidden_dim, self.num_classes])
+            print("Before global sum pool: ", logits.shape, batch.shape)
             logits = global_sum_pool(logits, batch)
-            return mlp(logits)
+            return self.mlp(logits)
         else:
             return logits
 
